@@ -1,1 +1,26 @@
-
+{
+  "id": "animenexus",
+  "name": "Anime Nexus",
+  "version": "0.1.0",
+  "manifestURI": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/Manifest.json",
+  "language": "typescript",
+  "type": "onlinestream-provider",
+  "description": "Experimental Anime Nexus provider; playback requires a temporary verified browser session.",
+  "author": "DefnoJae",
+  "website": "https://anime.nexus/",
+  "readme": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/README.md",
+  "lang": "multi",
+  "payloadURI": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/payload.ts",
+  "userConfig": {
+    "version": 1,
+    "requiresConfig": false,
+    "fields": [
+      {
+        "name": "playbackSession",
+        "label": "Playback session JSON (private; temporary)",
+        "type": "text",
+        "default": ""
+      }
+    ]
+  }
+}

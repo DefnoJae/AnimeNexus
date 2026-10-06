@@ -1,0 +1,9 @@
+{
+  "name": "seanime-anime-nexus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental Anime Nexus online-stream provider for Seanime",
+  "repository": "https://github.com/DefnoJae/AnimeNexus",
+  "scripts": { "check": "tsc --noEmit", "test": "node --test tests/provider.test.mjs" },
+  "devDependencies": { "typescript": "~5.9.3" }
+}

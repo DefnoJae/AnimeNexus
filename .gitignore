@@ -1,0 +1,4 @@
+node_modules/
+*.har
+playback-session*.json
+.session/
