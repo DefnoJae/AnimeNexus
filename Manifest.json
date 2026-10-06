@@ -1,7 +1,7 @@
 {
   "id": "animenexus",
   "name": "Anime Nexus",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "manifestURI": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/Manifest.json",
   "language": "typescript",
   "type": "onlinestream-provider",

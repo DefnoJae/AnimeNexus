@@ -1,6 +1,6 @@
 {
   "name": "seanime-anime-nexus",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Experimental Anime Nexus online-stream provider for Seanime",
   "repository": "https://github.com/DefnoJae/AnimeNexus",

@@ -1,6 +1,8 @@
 # Anime Nexus for Seanime
 
-Experimental online-stream provider using **https://anime.nexus/** exclusively. Its API, subtitle storage and video CDN are services used by that website. Version 0.1.0 is **not an unattended playback solution**.
+Experimental online-stream provider using **https://anime.nexus/** exclusively. Its API, subtitle storage and video CDN are services used by that website. Version 0.1.1 is **not an unattended playback solution**.
+
+Seanime 3.10.3 testing confirmed that the extension loads, but catalogue requests fail before episode matching. A repeat of the same public search request returned Cloudflare HTTP 403. Version 0.1.1 exposes safe text errors instead of Goja's opaque `map[]` rejection. This improves diagnostics; it does not fix the site's access block. A playback session import does not authorize catalogue requests.
 
 ## Install
 

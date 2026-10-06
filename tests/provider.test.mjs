@@ -37,7 +37,10 @@ test('episodes paginate, deduplicate, sort and omit fractional numbers', async (
 });
 test('rejects wrong pagination and HTTP verification failures', async () => {
     await assert.rejects(provider(() => ({ data: [], meta: { current_page: 1, last_page: 2 } })).findEpisodes(series), /pagination/);
-    await assert.rejects(provider(() => ({ status: 403 })).search({ query: 'Overgeared' }), /HTTP 403/);
+    await assert.rejects(provider(() => ({ status: 403 })).search({ query: 'Overgeared' }), reason => typeof reason === 'string' && reason.includes('HTTP 403'));
+});
+test('transport rejection exposes a safe string without leaking request details', async () => {
+    await assert.rejects(provider(() => { throw new Error('private credential'); }).search({ query: 'Overgeared' }), reason => typeof reason === 'string' && reason.includes('network request failed') && !reason.includes('private credential'));
 });
 test('server keeps master audio, forwards both header sets, maps subtitles', async () => {
     const p = provider((url, opts) => {

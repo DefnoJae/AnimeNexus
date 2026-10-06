@@ -13,14 +13,21 @@ class Provider {
     }
 
     private async request(url: string, headers: Record<string, string> = {}): Promise<FetchResponse> {
-        const response = await fetch(url, { headers: { Origin: this.site, Referer: this.site + "/", ...headers }, redirect: "error", timeout: 35 });
-        if (!response.ok) throw new Error("Anime Nexus request failed (HTTP " + response.status + "). Browser verification may be required.");
+        let response: FetchResponse;
+        try {
+            response = await fetch(url, { headers: { Origin: this.site, Referer: this.site + "/", ...headers }, redirect: "error", timeout: 35 });
+        } catch (_) {
+            // Goja exports native Error objects as map[] in rejected provider promises.
+            // Reject with a string; never include request URLs or session credentials.
+            throw "Anime Nexus network request failed before a response was available. Check connectivity and site verification.";
+        }
+        if (!response.ok) throw "Anime Nexus request failed (HTTP " + response.status + "). Browser verification may be required.";
         return response;
     }
 
     private async json(url: string): Promise<any> {
         const response = await this.request(url);
-        try { return response.json(); } catch (_) { throw new Error("Anime Nexus returned an invalid API response, possibly a verification page."); }
+        try { return response.json(); } catch (_) { throw "Anime Nexus returned an invalid API response, possibly a verification page."; }
     }
 
     async search(opts: SearchOptions): Promise<SearchResult[]> {
