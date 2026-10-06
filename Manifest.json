@@ -1,11 +1,11 @@
 {
   "id": "animenexus",
   "name": "Anime Nexus",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "manifestURI": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/Manifest.json",
   "language": "typescript",
   "type": "onlinestream-provider",
-  "description": "Experimental Anime Nexus provider; playback requires a temporary verified browser session.",
+  "description": "Anime Nexus provider using a local live stream resolver.",
   "author": "DefnoJae",
   "website": "https://anime.nexus/",
   "readme": "https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/README.md",
@@ -16,10 +16,10 @@
     "requiresConfig": false,
     "fields": [
       {
-        "name": "playbackSession",
-        "label": "Playback session JSON (private; temporary)",
+        "name": "resolverUrl",
+        "label": "Local resolver URL",
         "type": "text",
-        "default": ""
+        "default": "http://127.0.0.1:3000"
       }
     ]
   }
