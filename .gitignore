@@ -2,3 +2,5 @@ node_modules/
 *.har
 playback-session*.json
 .session/
+helper/bin/
+*.pem

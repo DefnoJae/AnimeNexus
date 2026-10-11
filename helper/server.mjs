@@ -2,11 +2,18 @@ import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { createGateway } from './gateway.mjs';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const bundledParser = fileURLToPath(new URL('./bin/jsdctl.exe', import.meta.url));
+if (process.platform === 'win32' && !process.env.JSDCTL_PATH && existsSync(bundledParser)) process.env.JSDCTL_PATH = bundledParser;
 
 const root = process.env.NEXUS_RESOLVER_PATH;
 if (!root) throw new Error('Set NEXUS_RESOLVER_PATH to your local anime-nexus-hls-stream-resolver folder. See README.');
 const load = name => import(pathToFileURL(path.resolve(root, 'lib', name)).href);
-const [{ httpClient, fetchJson }, { solveCloudflare }, proxy] = await Promise.all([load('net/fetch.mjs'), load('cf/solve.mjs'), load('core/proxy.mjs')]);
+const [{ httpClient, fetchJson, fetchBytes }, { solveCloudflare }, { resolvePlayback }, { rewritePlaylist }, { signUrl }] = await Promise.all([load('net/fetch.mjs'), load('cf/solve.mjs'), load('core/resolve.mjs'), load('hls/playlist.mjs'), load('nexus/stream.mjs')]);
+const proxy = createGateway({ resolvePlayback, fetchBytes, rewritePlaylist, signUrl });
 const port = Number(process.env.PORT || 3000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const origin = `http://127.0.0.1:${port}`;
@@ -61,3 +68,4 @@ const server = http.createServer(async (req, res) => {
     }
 });
 server.listen(port, '127.0.0.1', () => console.log(`Anime Nexus helper listening at ${origin}`));
+server.on('close', () => proxy.closeAll());
