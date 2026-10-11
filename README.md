@@ -20,6 +20,8 @@ Episodes retain numbering, include fillers and recaps, paginate and deduplicate,
 
 On 11 October 2026, live Frieren search returned the real series, and episode enumeration returned 28 episodes across two pages. For episode 1, browser verification and socket authorization succeeded. The master playlist exposed three video qualities and six audio entries; a variant playlist, its initialization file and three consecutive video segments returned HTTP 200. A complete episode and extended playback have not been tested.
 
+Version 0.4.2 was also tested in the Seanime browser interface and Seanime Denshi. Frieren episode 1 displayed moving video in both players. Denshi's installed `app://-` origin is explicitly allowed by the local playback gateway.
+
 The earlier user capture showed that playback credentials are obtained from `/api/auth/ws-token` after viewer preparation and interactive verification. The watch-page HTML contains null credentials. The provider no longer assumes those credentials are embedded in HTML.
 
 Run `npm ci`, `npm run check`, and `npm test` for development. To include the real transport fixture test, set the helper environment variables described in its README. Raw HARs, cookies and user sessions must not be committed. External resolver source is imported as a dependency and is not vendored.
