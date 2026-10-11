@@ -1,6 +1,6 @@
 # Local resolver adapter
 
-The helper must run throughout use. It serves the catalogue and retains live playback sockets when authorization succeeds. Playback currently stops at Anime Nexus's interactive verification requirement.
+The helper must run throughout use. It serves the catalogue and retains authorized playback sockets. When required, its local verification page runs Anime Nexus's supported Private Captcha challenge.
 
 ## Setup on Windows
 
@@ -35,7 +35,9 @@ Certificate verification stays enabled. Windows trusted server roots are read in
 
 ## Playback status
 
-Live search and both Frieren episode pages work. The stream API passes verification. The helper performs the observed viewer preparation and attestation POST requests, using the episode UUID and matching fingerprint headers. Anime Nexus responds with `TURNSTILE_REQUIRED`. Completing that interactive step is still required before socket authorization and playable HLS can be verified. The Python WebSocket adapter is implemented but has not been validated against an authorized Nexus playback session.
+Attempt an episode in Seanime first. If verification is required, open `http://127.0.0.1:3000/verification`, select its pending verification and click **Verify playback**. Retry in Seanime promptly after the page confirms success. Verification sends the browser's screen, audio and navigation timing metadata to Anime Nexus as required by its observed player authorization flow. Credentials and challenge solutions stay in memory; restarting the helper requires a fresh verification.
+
+Live search, both Frieren episode pages, browser verification, authorized WebSocket connection, HLS master and variant playlists, initialization file and three consecutive video segments passed validation on 11 October 2026. Extended playback remains untested. Active sockets are reused for repeated requests, and expired proofs require fresh verification.
 
 The gateway uses episode UUIDs and segment URL paths for authorization, obtains fresh segment tokens and closes failed or expired sessions. It preserves audio groups and CDN hosts. Region fallback, subtitles and dub search are not implemented.
 

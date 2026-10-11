@@ -23,3 +23,14 @@ test('failed master validation closes the socket',async()=>{
     const gateway=createGateway({resolvePlayback:async()=>({episodeId:'episode',masterUrl:'https://api.anime.nexus/master.m3u8',socket:{manifestToken:async()=>'',cdnHeaders:()=>({}),close:()=>{closed=true}}}),fetchBytes:async()=>({res:{ok:true},body:Buffer.from('<html>blocked</html>')}),signUrl:u=>u});
     try{await assert.rejects(gateway.openSession('watch'),/Invalid upstream/);assert.equal(closed,true);}finally{gateway.closeAll();}
 });
+test('only connected playback sessions are reusable', async () => {
+    const socket = { connected: true, manifestToken: async () => '', cdnHeaders: () => ({}), close() { this.connected = false; } };
+    const gateway = createGateway({ resolvePlayback: async () => ({ episodeId: 'episode', masterUrl: 'https://api.anime.nexus/master.m3u8', socket }), fetchBytes: async () => ({ res: { ok: true }, body: Buffer.from('#EXTM3U\n') }), signUrl: url => url });
+    try {
+        const { playId } = await gateway.openSession('watch');
+        assert.equal(gateway.isActive(playId), true);
+        socket.connected = false;
+        assert.equal(gateway.isActive(playId), false);
+        assert.equal(gateway.isActive('missing'), false);
+    } finally { gateway.closeAll(); }
+});

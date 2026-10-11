@@ -17,6 +17,7 @@ export function createGateway({ resolvePlayback, fetchBytes, rewritePlaylist, si
         return body.toString('utf8');
     }
     return {
+        isActive(id) { const s = sessions.get(id); return Boolean(s && s.socket.connected && Date.now() - s.created < ttl); },
         async openSession(watchUrl) {
             const s = await resolvePlayback(watchUrl);
             try {

@@ -5,6 +5,11 @@ import { EventEmitter } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+const browserMetadata = new Map();
+export function setBrowserMetadata(fingerprint, metadata) {
+    for (const [key, record] of browserMetadata) if (record.expires <= Date.now()) browserMetadata.delete(key);
+    browserMetadata.set(fingerprint, { metadata, expires: Date.now() + 5 * 60 * 1000 });
+}
 
 export function installTransport(root) {
     const require = createRequire(path.join(root, 'package.json'));
@@ -29,7 +34,13 @@ export function installTransport(root) {
         if (data.socket) {
             const socket = sockets.get(data.socket);
             if (!socket) return;
-            if (data.event === 'message') socket.emit('message', Buffer.from(data.data, 'base64'));
+            if (data.event === 'message') {
+                const packet = Buffer.from(data.data, 'base64');
+                if (packet.toString().startsWith('42/video,')) {
+                    try { const [event, payload] = JSON.parse(packet.toString().slice(9)); if (event === 'authentication-error') console.error('Socket rejection code:', typeof payload?.code === 'number' ? payload.code : 'unspecified'); } catch {}
+                }
+                socket.emit('message', packet);
+            }
             else if (data.event === 'error') socket.emit('error', Object.assign(new Error(`Verified socket ${data.error}`), { code: data.code }));
             else { socket.connected = data.event === 'open'; socket.emit(data.event); if (data.event === 'close') sockets.delete(data.socket); }
             return;
@@ -59,7 +70,13 @@ export function installTransport(root) {
     class CurlWebSocket extends EventEmitter {
         constructor(url, options = {}) { super(); this.id = randomUUID(); this.url = url; this.options = options; this.connected = false; }
         connect() { sockets.set(this.id, this); send({ op: 'connect', socket: this.id, url: this.url, options: this.options }); }
-        send(data) { send({ op: 'send', socket: this.id, data: String(data) }); }
+        send(data) {
+            let packet = String(data);
+            if (packet.startsWith('42/video,')) {
+                try { const payload = JSON.parse(packet.slice(9)); const record = browserMetadata.get(payload[1]?.fingerprint); if (payload[0] === 'auth' && record?.expires > Date.now()) { payload[1]._m = record.metadata; packet = '42/video,' + JSON.stringify(payload); } } catch {}
+            }
+            send({ op: 'send', socket: this.id, data: packet });
+        }
         close() { send({ op: 'close', socket: this.id }); }
     }
     // Install before the upstream ESM wrapper captures these CJS exports.
