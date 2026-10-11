@@ -1,6 +1,6 @@
 # Anime Nexus for Seanime
 
-Version 0.2.1 uses a local live resolver instead of importing expiring browser sessions. Anime Nexus is the only content source; its API and CDN supply catalogue entries and streams.
+Version 0.3.0 provides live Anime Nexus search and episode enumeration through a local helper. **Playback remains blocked by interactive verification (`TURNSTILE_REQUIRED`).** This is an experimental provider, not a working playback release yet.
 
 Install manifest:
 
@@ -8,18 +8,18 @@ Install manifest:
 https://raw.githubusercontent.com/DefnoJae/AnimeNexus/main/Manifest.json
 ```
 
-## Required local helper
+Follow [helper setup](helper/README.md), start `npm run helper`, and set **Local resolver URL** in Seanime to `http://127.0.0.1:3000`. Keep the helper running. Anime Nexus is the only content source; its API and CDN supply catalogue entries and streams.
 
-Follow [helper setup](helper/README.md), start `npm run helper`, and set **Local resolver URL** in Seanime to `http://127.0.0.1:3000`. Keep it running throughout playback. The external [resolver](https://github.com/sharoon7171/anime-nexus-hls-stream-resolver) establishes site verification and retains the socket to obtain fresh playlist and segment tokens. The provider returns a local adaptive HLS master without embedding captured credentials.
+The helper now uses Python curl_cffi with browser impersonation and certificate verification enabled. On Windows it reads the existing trusted root certificates without installing certificates or changing system trust. This fixes the previous native transport error 60. Catalogue responses that already succeed are accepted without requiring a Cloudflare cookie. When a challenge appears, the solver consumes that actual response without fetching it twice.
 
-Search and episode enumeration now use the helper's verified HTTP client rather than Seanime's blocked direct requests. Episodes retain source numbering, include fillers and recaps, paginate and deduplicate, and exclude unsupported fractional numbers. Select **Nexus HLS**. Audio tracks remain in the adaptive master. Dub-specific search and external subtitles are currently unsupported.
+Episodes retain numbering, include fillers and recaps, paginate and deduplicate, and exclude unsupported fractional numbers. Select **Nexus HLS**. The gateway preserves adaptive audio groups and obtains fresh segment tokens. Dub-specific search and subtitles are currently unsupported.
 
-## Validation and remaining blockers
+## Validation
 
-TypeScript checks and nine automated tests pass. The adapter starts on Windows and responds to health checks. A native Windows parser now builds and successfully parses the current public site script. Segment authorization now uses the captured episode ID and segment URL fields, with fresh tokens and session cleanup. **Live site access and playback remain unverified:** the native HTTP client still fails certificate validation with TLS error 60, even after testing the existing Windows trusted roots. Verification is not disabled. See the helper README for details.
+On 11 October 2026, live Frieren search returned the real series, and episode enumeration returned 28 episodes across two pages. The stream metadata request passed site verification. Playback authorization reached the observed `/api/auth/ws-token` flow and returned `TURNSTILE_REQUIRED`. The helper reports that limitation explicitly. Socket authorization, master playback and sustained media delivery have not passed end-to-end validation.
 
-The earlier user-provided capture confirmed the real catalogue/episode routes and successful three-quality multi-audio playback for Overgeared episode 1. That browser result does not prove this helper works end to end. Seanime previously loaded the provider but failed during direct catalogue search. Version 0.2.0 moves that request to the helper and exports errors as strings, including schema and validation failures that previously appeared as `map[]`.
+The earlier user capture showed that playback credentials are obtained from `/api/auth/ws-token` after viewer preparation and interactive verification. The watch-page HTML contains null credentials. The provider no longer assumes those credentials are embedded in HTML.
 
-Run `npm ci`, `npm run check`, and `npm test` for development. No raw HARs, cookies or user sessions belong in this repository. The external resolver is read as a dependency; none of its source has been vendored here.
+Run `npm ci`, `npm run check`, and `npm test` for development. To include the real transport fixture test, set the helper environment variables described in its README. Raw HARs, cookies and user sessions must not be committed. External resolver source is imported as a dependency and is not vendored.
 
 Interface reference: [Seanime online-stream provider](https://seanime.gitbook.io/seanime-extensions/content-providers/online-streaming-provider).

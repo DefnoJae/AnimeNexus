@@ -5,34 +5,84 @@ import { randomUUID } from 'node:crypto';
 import { createGateway } from './gateway.mjs';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { installTransport } from './transport.mjs';
 
 const bundledParser = fileURLToPath(new URL('./bin/jsdctl.exe', import.meta.url));
 if (process.platform === 'win32' && !process.env.JSDCTL_PATH && existsSync(bundledParser)) process.env.JSDCTL_PATH = bundledParser;
 
 const root = process.env.NEXUS_RESOLVER_PATH;
 if (!root) throw new Error('Set NEXUS_RESOLVER_PATH to your local anime-nexus-hls-stream-resolver folder. See README.');
+const closeTransport = installTransport(root);
 const load = name => import(pathToFileURL(path.resolve(root, 'lib', name)).href);
-const [{ httpClient, fetchJson, fetchBytes }, { solveCloudflare }, { resolvePlayback }, { rewritePlaylist }, { signUrl }] = await Promise.all([load('net/fetch.mjs'), load('cf/solve.mjs'), load('core/resolve.mjs'), load('hls/playlist.mjs'), load('nexus/stream.mjs')]);
+const [{ httpClient, fetchBytes }, { solveCloudflare }, { rewritePlaylist }, { signUrl, pickStream }, { VideoSocket }, { streamApiUrl }, { parseWatchUrl }] = await Promise.all([load('net/fetch.mjs'), load('cf/solve.mjs'), load('hls/playlist.mjs'), load('nexus/stream.mjs'), load('net/socket.mjs'), load('nexus/site.mjs'), load('nexus/watch.mjs')]);
+async function atStage(stage, action) { try { return await action(); } catch (error) { error.stage = stage; error.code ||= ['could not find __CF$cv$params', 'page loaded without challenge params and no cf_clearance', 'JSD oneshot did not return cf_clearance', 'Catalogue response was not JSON'].find(message => error.message?.includes(message)); throw error; } }
+async function resolvePlayback(input) {
+    const { episodeId, watchUrl } = parseWatchUrl(input);
+    const fingerprint = randomUUID();
+    const streamUrl = new URL(streamApiUrl(episodeId));
+    const meta = await atStage('stream metadata', () => api(streamUrl.pathname + streamUrl.search, fingerprint));
+    await atStage('watch verification', () => solveCloudflare(watchUrl, client));
+    const attestation = await atStage('playback attestation', () => fetchAttestation(episodeId, fingerprint, watchUrl));
+    const stream = pickStream(meta);
+    const socket = new VideoSocket({ episodeId, fingerprint, m3u8Url: stream.url, client, watchUrl, attestation });
+    try { await atStage('socket authorization', () => socket.connect()); }
+    catch (error) { socket.close(); throw error; }
+    return { socket, http: client, episodeId, videoId: stream.videoId, watchUrl, masterUrl: stream.url };
+}
+async function fetchAttestation(episodeId, fingerprint, watchUrl) {
+    const url = 'https://anime.nexus/api/auth/ws-token';
+    const headers = { 'Content-Type': 'application/json', Origin: 'https://anime.nexus', Referer: watchUrl, 'X-Client-Fingerprint': fingerprint, 'X-Fingerprint': fingerprint, 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Site': 'same-origin' };
+    const base = { videoId: episodeId, fingerprint, purpose: 'init' };
+    async function post(body) {
+        const options = { headers, data: JSON.stringify(body) };
+        let result = await client.post(url, options);
+        if (result.buffer().includes('__CF$cv$params')) {
+            let first = true;
+            await solveCloudflare(url, {
+                get: (target, options) => { if (first && target === url) { first = false; return Promise.resolve(result); } return client.get(target, options); },
+                post: (target, options) => client.post(target, options),
+                exportCookies: () => client.exportCookies(),
+            });
+            result = await client.post(url, options);
+        }
+        return result;
+    }
+    const prepared = await post({ ...base, prepareViewer: true });
+    if (!prepared.ok) { const error = new Error('Viewer preparation failed'); error.code = 'VIEWER_HTTP_' + prepared.status; throw error; }
+    const result = await post(base);
+    let data; try { data = result.json(); } catch { throw new Error('Invalid attestation response'); }
+    if (!result.ok || !data.refId || !data.wireSecret) {
+        const error = new Error('Playback attestation failed');
+        error.code = 'ATTEST_HTTP_' + result.status;
+        if (['TURNSTILE_REQUIRED', 'TURNSTILE_FAILED', 'FALLBACK_REQUIRED', 'ALTCHA_REQUIRED'].includes(data.code)) error.code = data.code;
+        throw error;
+    }
+    return { ref: data.refId, secret: data.wireSecret };
+}
 const proxy = createGateway({ resolvePlayback, fetchBytes, rewritePlaylist, signUrl });
 const port = Number(process.env.PORT || 3000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const origin = `http://127.0.0.1:${port}`;
-let client, expires = 0, preparing;
-async function api(route) {
+let client;
+async function api(route, fingerprint = randomUUID()) {
     const url = 'https://api.anime.nexus' + route;
-    if (!client || Date.now() >= expires) {
-        if (!preparing) preparing = (async () => {
-            const candidate = httpClient();
-            await solveCloudflare(url, candidate);
-            client = candidate;
-            expires = Date.now() + 20 * 60 * 1000;
-        })().finally(() => { preparing = undefined; });
-        await preparing;
+    client ||= httpClient();
+    const init = { headers: { Origin: 'https://anime.nexus', Referer: 'https://anime.nexus/', Accept: 'application/json', 'X-Fingerprint': fingerprint, 'X-Client-Fingerprint': fingerprint } };
+    let response = await fetchBytes(client, url, init);
+    if (response.body.includes('__CF$cv$params')) {
+        // The site may only send challenge parameters on the first response.
+        // Let the solver consume that response instead of fetching it again.
+        let first = true;
+        await solveCloudflare(url, {
+            get: (target, options) => { if (first && target === url) { first = false; return Promise.resolve(response.res); } return client.get(target, options); },
+            post: (target, options) => client.post(target, options),
+            exportCookies: () => client.exportCookies(),
+        });
+        response = await fetchBytes(client, url, init);
     }
-    const fingerprint = randomUUID();
-    const { res, data } = await fetchJson(client, url, { headers: { Origin: 'https://anime.nexus', Referer: 'https://anime.nexus/', Accept: 'application/json', 'X-Fingerprint': fingerprint, 'X-Client-Fingerprint': fingerprint } });
-    if (!res.ok) { expires = 0; throw new Error(`Catalogue HTTP ${res.status}`); }
-    return data;
+    if (!response.res.ok) throw new Error(`Catalogue HTTP ${response.res.status}`);
+    try { return JSON.parse(response.body.toString('utf8')); }
+    catch { throw new Error('Catalogue response was not JSON'); }
 }
 const server = http.createServer(async (req, res) => {
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
@@ -62,10 +112,11 @@ const server = http.createServer(async (req, res) => {
         }
         return json(404, { error: 'Not found' });
     } catch (error) {
-        console.error('Nexus helper failure:', error.code || error.name || 'Error');
+        console.error('Nexus helper failure:', error.stage || 'request', error.code || error.name || 'Error');
         if (res.headersSent) return res.destroy();
+        if (['TURNSTILE_REQUIRED', 'TURNSTILE_FAILED', 'FALLBACK_REQUIRED', 'ALTCHA_REQUIRED'].includes(error.code)) return json(502, { error: 'Anime Nexus requires interactive playback verification. Search works, but this helper cannot yet complete that verification.', code: error.code });
         return json(502, { error: 'Resolver verification failed. Check certificate trust, resolver dependencies and JSDCTL_PATH.' });
     }
 });
 server.listen(port, '127.0.0.1', () => console.log(`Anime Nexus helper listening at ${origin}`));
-server.on('close', () => proxy.closeAll());
+server.on('close', () => { proxy.closeAll(); closeTransport(); });

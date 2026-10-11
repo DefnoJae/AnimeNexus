@@ -4,3 +4,4 @@ playback-session*.json
 .session/
 helper/bin/
 *.pem
+helper/python-deps/
