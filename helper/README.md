@@ -42,3 +42,5 @@ Live search, both Frieren episode pages, browser verification, authorized WebSoc
 The gateway uses episode UUIDs and segment URL paths for authorization, obtains fresh segment tokens and closes failed or expired sessions. It preserves audio groups and CDN hosts. Region fallback, subtitles and dub search are not implemented.
 
 The helper binds only to 127.0.0.1 and allows the observed catalogue routes and Nexus CDN families. `/health` confirms only that the helper is listening, not that upstream verification or playback works.
+
+Playback responses allow local browser origins and Seanime Denshi's observed `app://-` origin. Verification submissions still require the helper's own origin. Version 0.4.2 corrects the desktop player's access to the local HLS gateway.

@@ -18,3 +18,13 @@ test('foreign sites and verification routes receive no playback CORS permission'
         assert.equal(res.headers['Access-Control-Allow-Origin'], undefined);
     }
 });
+test('Denshi installed app origin can load playback while other app origins cannot', () => {
+    const res = response();
+    playbackCors({ method: 'GET', headers: { origin: 'app://-' } }, res, '/play/id/master.m3u8');
+    assert.equal(res.headers['Access-Control-Allow-Origin'], 'app://-');
+    for (const origin of ['app://foreign', 'null']) {
+        const foreign = response();
+        playbackCors({ method: 'GET', headers: { origin } }, foreign, '/play/id/master.m3u8');
+        assert.equal(foreign.headers['Access-Control-Allow-Origin'], undefined);
+    }
+});
