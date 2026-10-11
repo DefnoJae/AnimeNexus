@@ -42,3 +42,26 @@ test('expired authorization is discarded and a fresh verification can be created
     assert.equal(broker.get('expired'), undefined);
     assert.notEqual(broker.create({ episodeId: 'expired', fingerprint: 'fresh', fallback, client: {}, submit: async () => ({}) }), id);
 });
+test('automatic companion requires same-origin activation and resumes accepted jobs', async () => {
+    const broker = createVerificationBroker(), origin = 'http://127.0.0.1:3000';
+    const id = broker.create({ episodeId: 'auto', fingerprint: 'fingerprint', fallback, client: {}, submit: async () => ({ ref: 'ref', secret: 'secret', expiresAt: Date.now() + 60000 }) });
+    const endpoint = new URL(origin + '/verification/runner');
+    const denied = response();
+    await broker.handle({ method: 'POST', headers: { origin: 'https://foreign.example' } }, denied, endpoint, origin);
+    assert.equal(denied.status, 403); assert.equal(broker.runnerActive(), false);
+    const ready = response();
+    await broker.handle({ method: 'POST', headers: { origin } }, ready, endpoint, origin);
+    assert.deepEqual(JSON.parse(ready.body).pending, [id]);
+    const page = response();
+    await broker.handle({ method: 'GET' }, page, new URL(origin + '/verification/' + id + '?automatic=1'), origin);
+    assert.match(page.body, /addEventListener\("load",\(\)=>button.click\(\)\)/);
+    const request = Readable.from([Buffer.from(JSON.stringify({ solution: 'proof' }))]); request.method = 'POST'; request.headers = { origin };
+    await broker.handle(request, response(), new URL(origin + '/verification/' + id + '/solution'), origin);
+    assert.equal(await broker.waitFor(id, 10), true);
+    assert.equal(await broker.waitFor('missing', 10), false);
+    const next = response();
+    const waiting = broker.handle({ method: 'POST', headers: { origin } }, next, new URL(origin + '/verification/runner?seen=' + id), origin);
+    const nextId = broker.create({ episodeId: 'next', fingerprint: 'next', fallback, client: {}, submit: async () => ({}) });
+    await waiting;
+    assert.deepEqual(JSON.parse(next.body).pending, [nextId]);
+});

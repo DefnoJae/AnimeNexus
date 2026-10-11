@@ -9,9 +9,22 @@ const allowed = value => {
 
 export function createVerificationBroker() {
     const jobs = new Map();
+    let heartbeat = 0;
+    const runnerActive = () => Date.now() - heartbeat < 12000;
     function prune() { for (const [id, job] of jobs) if (job.expires <= Date.now()) jobs.delete(id); }
     const html = body => '<!doctype html><html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Anime Nexus verification</title><style>body{font:18px system-ui;max-width:640px;margin:60px auto;padding:24px;background:#111827;color:#e5e7eb}button,a{font:inherit;color:#93c5fd}button{background:#1f2937;padding:12px;border:1px solid #64748b;border-radius:8px}</style>' + body + '</html>';
     return {
+        runnerActive,
+        async waitFor(id, timeout = 25000) {
+            const until = Date.now() + timeout;
+            while (Date.now() < until && runnerActive()) {
+                const job = jobs.get(id);
+                if (!job || job.expires <= Date.now()) return false;
+                if (job.attestation) return true;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return false;
+        },
         get(episodeId) { prune(); return [...jobs.values()].find(job => job.episodeId === episodeId && job.attestation && (!job.attestation.expiresAt || job.attestation.expiresAt > Date.now())); },
         create({ episodeId, fingerprint, fallback, client, submit }) {
             prune();
@@ -29,8 +42,25 @@ export function createVerificationBroker() {
             res.setHeader('Cache-Control', 'no-store');
             res.setHeader('Referrer-Policy', 'no-referrer');
             res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('X-Frame-Options', 'SAMEORIGIN');
             const respond = (status, mime, body) => { res.writeHead(status, { 'Content-Type': mime }); res.end(body); return true; };
-            if (url.pathname === '/verification' && req.method === 'GET') return respond(200, 'text/html; charset=utf-8', html('<h1>Anime Nexus playback</h1><p>Complete verification, then retry the episode in Seanime.</p>' + [...jobs.values()].map(job => `<p><a href="/verification/${job.id}">${job.attestation ? 'Verified' : 'Verify playback'} (${escape(job.episodeId)})</a></p>`).join('')));
+            if (url.pathname === '/verification/runner' && req.method === 'POST') {
+                if (req.headers.origin !== origin) return respond(403, 'text/plain', 'Invalid origin');
+                heartbeat = Date.now();
+                const seen = new Set((url.searchParams.get('seen') || '').split(','));
+                const pending = () => [...jobs.values()].filter(job => !job.attestation && !seen.has(job.id)).map(job => job.id);
+                const until = Date.now() + 8000;
+                while (!pending().length && Date.now() < until && !res.destroyed) await new Promise(resolve => setTimeout(resolve, 100));
+                if (res.destroyed) return true;
+                heartbeat = Date.now();
+                return respond(200, 'application/json', JSON.stringify({ pending: pending() }));
+            }
+            if (url.pathname === '/verification' && req.method === 'GET') return respond(200, 'text/html; charset=utf-8', html(`<h1>Anime Nexus playback</h1><p>Enable automatic verification and keep this page open while using Seanime. New episodes will verify through Anime Nexus's supported challenge. This sends browser screen, audio and navigation timing information to Anime Nexus.</p><button id="enable">Enable automatic verification</button><p id="runner-status">Automatic verification is off.</p><div id="frames"></div><script>
+const enable=document.getElementById('enable'),runnerStatus=document.getElementById('runner-status'),frames=document.getElementById('frames');let running=false,busy=false;const seen=new Set();
+async function tick(){if(!running||busy)return;busy=true;let failed=false;try{const response=await fetch('/verification/runner?seen='+encodeURIComponent([...seen].join(',')),{method:'POST'});if(!response.ok)throw Error();const data=await response.json();for(const id of data.pending){if(seen.has(id))continue;seen.add(id);const frame=document.createElement('iframe');frame.title='Episode playback verification';frame.style='width:100%;height:260px;border:0';frame.src='/verification/'+id+'?automatic=1';frames.replaceChildren(frame);runnerStatus.textContent='Verifying episode…';break;}}catch{failed=true;runnerStatus.textContent='Helper unavailable. Keep it running.';}finally{busy=false;if(running){if(failed)setTimeout(tick,5000);else queueMicrotask(tick);}}}
+enable.onclick=()=>{running=!running;enable.textContent=running?'Disable automatic verification':'Enable automatic verification';runnerStatus.textContent=running?'Ready. Open an episode in Seanime.':'Automatic verification is off.';if(running)tick();};
+window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data==='nexus-verified')runnerStatus.textContent='Verified. Seanime can continue playback.';});
+</script>`));
             const match = url.pathname.match(/^\/verification\/([a-f0-9-]{36})(?:\/(script|puzzle|solution))?$/);
             const job = match && jobs.get(match[1]);
             if (!job) return respond(404, 'text/plain', 'Verification expired. Retry the episode in Seanime.');
@@ -38,10 +68,11 @@ export function createVerificationBroker() {
             if (!resource && req.method === 'GET') {
                 const page = `<h1>Verify Anime Nexus playback</h1><p>This runs Anime Nexus's supported Private Captcha verification. After completion, retry the episode in Seanime.</p><form><div id="widget"></div><button id="verify" type="button">Verify playback</button></form><p id="status">Ready.</p><script src="/verification/${job.id}/script"></script><script>
 const status=document.getElementById('status'),button=document.getElementById('verify'),host=document.getElementById('widget');let widget;
-host.addEventListener('privatecaptcha:finish',async()=>{try{const nav=performance.getEntriesByType('navigation')[0];const audio=new AudioContext();const metadata={navigation:{startTime:nav.startTime,domContentLoaded:nav.domContentLoadedEventEnd,loadEventEnd:nav.loadEventEnd},audio:{sampleRate:audio.sampleRate,baseLatency:audio.baseLatency,outputLatency:audio.outputLatency||0},screen:{width:innerWidth,height:innerHeight,colorDepth:screen.colorDepth,pixelRatio:devicePixelRatio},collectedAt:Date.now()};audio.close();const response=await fetch('/verification/${job.id}/solution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({solution:widget.solution(),metadata})});if(!response.ok)throw Error();status.textContent='Verified. Retry the episode in Seanime.';}catch{status.textContent='Verification was rejected. Retry the episode to start again.';button.disabled=false;}});
+host.addEventListener('privatecaptcha:finish',async()=>{try{const nav=top.performance.getEntriesByType('navigation')[0];const audio=new AudioContext();const metadata={navigation:{startTime:nav.startTime,domContentLoaded:nav.domContentLoadedEventEnd,loadEventEnd:nav.loadEventEnd},audio:{sampleRate:audio.sampleRate,baseLatency:audio.baseLatency,outputLatency:audio.outputLatency||0},screen:{width:top.innerWidth,height:top.innerHeight,colorDepth:screen.colorDepth,pixelRatio:devicePixelRatio},collectedAt:Date.now()};audio.close();const response=await fetch('/verification/${job.id}/solution',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({solution:widget.solution(),metadata})});if(!response.ok)throw Error();status.textContent='Verified. Retry the episode in Seanime.';if(parent!==window)parent.postMessage('nexus-verified',location.origin);}catch{status.textContent='Verification was rejected. Retry the episode to start again.';button.disabled=false;}});
 host.addEventListener('privatecaptcha:error',()=>{status.textContent='Verification could not complete. Retry the episode.';button.disabled=false;});
 button.onclick=()=>{button.disabled=true;status.textContent='Verifying…';try{widget=window.privateCaptcha.render(host,{sitekey:${JSON.stringify(job.sitekey)},puzzleEndpoint:location.origin+'/verification/${job.id}/puzzle',startMode:'click',displayMode:'hidden'});Promise.resolve(widget.execute()).catch(()=>{status.textContent='Verification could not start.';button.disabled=false;});}catch{status.textContent='Verification could not start.';button.disabled=false;}};</script>`;
-                return respond(200, 'text/html; charset=utf-8', html(page));
+                const automatic = url.searchParams.get('automatic') === '1' && runnerActive();
+                return respond(200, 'text/html; charset=utf-8', html(page + (automatic ? '<script>addEventListener("load",()=>button.click());</script>' : '')));
             }
             if (resource === 'script' && req.method === 'GET') {
                 const result = await job.client.get(job.script);

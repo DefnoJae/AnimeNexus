@@ -35,7 +35,7 @@ Certificate verification stays enabled. Windows trusted server roots are read in
 
 ## Playback status
 
-Attempt an episode in Seanime first. If verification is required, open `http://127.0.0.1:3000/verification`, select its pending verification and click **Verify playback**. Retry in Seanime promptly after the page confirms success. Verification sends the browser's screen, audio and navigation timing metadata to Anime Nexus as required by its observed player authorization flow. Credentials and challenge solutions stay in memory; restarting the helper requires a fresh verification.
+Open `http://127.0.0.1:3000/verification` and enable automatic verification before opening episodes. Leave the companion page open. It waits for requests through a same-origin connection and runs the site's supported challenge; the helper then resumes the episode automatically. Without an active companion, a failed episode request returns a manual verification link. Browser screen, audio and navigation timing metadata are sent to Anime Nexus as required by its observed player authorization flow. Credentials and challenge solutions stay in memory; restarting the helper requires fresh authorization. Enable the companion again after reloading its page.
 
 Live search, both Frieren episode pages, browser verification, authorized WebSocket connection, HLS master and variant playlists, initialization file and three consecutive video segments passed validation on 11 October 2026. Extended playback remains untested. Active sockets are reused for repeated requests, and expired proofs require fresh verification.
 

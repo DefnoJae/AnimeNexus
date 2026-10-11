@@ -81,6 +81,25 @@ async function fetchAttestation(episodeId, fingerprint, watchUrl) {
 }
 const proxy = createGateway({ resolvePlayback, fetchBytes, rewritePlaylist, signUrl });
 const playbackCache = new Map();
+const resolving = new Map();
+async function getPlayback(watch) {
+    const cached = playbackCache.get(watch);
+    if (cached && proxy.isActive(cached.playId)) return cached;
+    if (resolving.has(watch)) return resolving.get(watch);
+    const pending = (async () => {
+        let session;
+        try { session = await proxy.openSession(watch); }
+        catch (error) {
+            if (error.code !== 'VERIFICATION_REQUIRED' || !verification.runnerActive() || !await verification.waitFor(error.verificationId)) throw error;
+            session = await proxy.openSession(watch);
+        }
+        playbackCache.set(watch, session);
+        for (const [key, value] of playbackCache) if (!proxy.isActive(value.playId)) playbackCache.delete(key);
+        return session;
+    })();
+    resolving.set(watch, pending);
+    try { return await pending; } finally { resolving.delete(watch); }
+}
 const port = Number(process.env.PORT || 3000);
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid PORT');
 const origin = `http://127.0.0.1:${port}`;
@@ -121,10 +140,7 @@ const server = http.createServer(async (req, res) => {
         if (url.pathname === '/api/resolve') {
             const watch = url.searchParams.get('url');
             if (!/^https:\/\/anime\.nexus\/watch\/[a-f0-9-]{36}(?:\/[^?#]*)?$/.test(watch || '')) return json(400, { error: 'Invalid watch URL' });
-            const cached = playbackCache.get(watch);
-            const session = cached && proxy.isActive(cached.playId) ? cached : await proxy.openSession(watch);
-            playbackCache.set(watch, session);
-            for (const [key, value] of playbackCache) if (!proxy.isActive(value.playId)) playbackCache.delete(key);
+            const session = await getPlayback(watch);
             return json(200, { playUrl: `${origin}/play/${session.playId}/master.m3u8` });
         }
         const master = url.pathname.match(/^\/play\/([a-f0-9-]{36})\/master\.m3u8$/);
