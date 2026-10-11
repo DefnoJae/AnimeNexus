@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { installTransport, setBrowserMetadata } from './transport.mjs';
 import { createVerificationBroker } from './verification.mjs';
+import { playbackCors } from './cors.mjs';
 const verification = createVerificationBroker();
 
 const bundledParser = fileURLToPath(new URL('./bin/jsdctl.exe', import.meta.url));
@@ -108,6 +109,7 @@ const server = http.createServer(async (req, res) => {
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
     try {
         const url = new URL(req.url, origin);
+        if (playbackCors(req, res, url.pathname)) return;
         if (await verification.handle(req, res, url, origin)) return;
         if (req.method !== 'GET') return json(405, { error: 'GET required' });
         if (url.pathname === '/health') return json(200, { ready: true });

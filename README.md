@@ -1,6 +1,6 @@
 # Anime Nexus for Seanime
 
-Version 0.4.0 provides Anime Nexus search, episode enumeration and playable HLS through a local helper. When the site requires playback verification, complete its supported Private Captcha challenge in your browser, then retry the episode in Seanime.
+Version 0.4.1 provides Anime Nexus search, episode enumeration and playable HLS through a local helper. When the site requires playback verification, complete its supported Private Captcha challenge in your browser, then retry the episode in Seanime.
 
 Install manifest:
 
